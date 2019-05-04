@@ -16,11 +16,34 @@ const int ForwardMax = 255;
 
 const int SteerZeroPosMin = 125;
 const int SteerZeroPosMax = 129;
+const int SteerPosMax = 255;
+const int SteerPosMin = 0;
+const int SteerOverallMax = 1000;
+const int SteerOverallZero = 0;
+const int SteerOverallMin = -1000;
+
+const int SteerEnablePin = 12;
+
+typedef struct MsgToHoverboard_t{
+  unsigned char SOM;  // 0x02
+  unsigned char len;  // len is len of ALL bytes to follow, including CS
+  unsigned char cmd;  // 'W'
+  unsigned char code; // code of value to write
+  int16_t base_pwm;   // absolute value ranging from -1000 to 1000 .. base_pwm plus/minus steer is the raw PWM value
+  int16_t steer;      // absolute value ranging from -1000 to 1000 .. wether steer is added or substracted depends on the side R/L
+  unsigned char CS;   // checksumm
+};
+
+typedef union UART_Packet_t{
+  MsgToHoverboard_t msgToHover;
+  byte UART_Packet[sizeof(MsgToHoverboard_t)];
+};
 
 Nunchuk nunchuk; //A4/A5
 SoftwareSerial SerialBoard(10, 11); //D10/D11
 
 void setup() {
+  pinMode(SteerEnablePin, INPUT);
   Serial.begin(115200);
   SerialBoard.begin(115200);
   nunchuk.begin(); //D4/D5
@@ -30,8 +53,13 @@ void setup() {
 boolean readSuccess = false;
 boolean firstConnection = true;
 int currentSpeed = SpeedOverallZero;
+int currentSteer = SteerOverallZero;
 void loop()
 {
+  UART_Packet_t ups;
+  boolean steerEnable = true;
+  
+  steerEnable = digitalRead(SteerEnablePin);
   
   //Wurde bei der letzten Runde die Nunchuck noch nicht Verbunden?
   if(!readSuccess)
@@ -39,7 +67,6 @@ void loop()
     //Dann verbinde
     readSuccess = nunchuk.connect(); //Connect controller
     firstConnection = true;
-    
   }
   
   if(readSuccess)
@@ -74,6 +101,17 @@ void loop()
       if(!firstConnection &&
         zButton)
       {
+        //Lenken (Wenn aktiv)
+        if(steerEnable)
+        {
+          currentSteer = map(joyX, SteerPosMin, SteerPosMax, SteerOverallMin, SteerOverallMax);
+        }
+        else
+        {
+          currentSteer = SteerOverallZero;
+        }
+        
+        //Geschwindigkeit
         //Soll langsam gebremst werden? (Joystick mittig)
         if(joyY >= SpeedZeroPosMin &&
           joyY <= SpeedZeroPosMax)
@@ -216,10 +254,32 @@ void loop()
       {
         //Totmannschalter nicht gedrückt, Controller ab, irgendwas stimmt nicht: Bremsen!
         currentSpeed = SpeedOverallZero;
+        currentSteer = SteerOverallZero;
       }
     }
   }
+  
+  ups.msgToHover.SOM = 2 ;  // PROTOCOL_SOM; //Start of Message;
+  ups.msgToHover.len = 7;   // payload + SC only
+  ups.msgToHover.cmd  = 'W'; // PROTOCOL_CMD_WRITEVAL;  // Write value
+  ups.msgToHover.code = 0x07; // speed data from params array
+  ups.msgToHover.base_pwm = currentSpeed;
+  ups.msgToHover.steer = currentSteer;
+  ups.msgToHover.CS = 0;
 
-  Serial.println(currentSpeed);
+  for (int i = 0; i < ups.msgToHover.len; i++){
+    ups.msgToHover.CS -= ups.UART_Packet[i+1];
+  }
+
+  SerialBoard.write(ups.UART_Packet, sizeof(UART_Packet_t));
+  
+  Serial.print(SpeedOverallMax);
+  Serial.print(" ");
+  Serial.print(SpeedOverallMin);
+  Serial.print(" ");
+  Serial.print(currentSpeed);
+  Serial.print(" ");
+  Serial.print(currentSteer);
+  Serial.println(" Info");
   delay(10);
 }
