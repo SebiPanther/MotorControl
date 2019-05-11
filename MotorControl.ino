@@ -14,13 +14,18 @@ const int SpeedZeroPosMin = 126;
 const int SpeedZeroPosMax = 130;
 const int ForwardMax = 255;
 
-const int SteerZeroPosMin = 125;
-const int SteerZeroPosMax = 129;
-const int SteerPosMax = 255;
-const int SteerPosMin = 0;
-const int SteerOverallMax = 1000;
+const int SteerOverallRight = 250;
 const int SteerOverallZero = 0;
-const int SteerOverallMin = -1000;
+const int SteerOverallLeft = -250;
+const int SteerIncreasement = 1;
+const int SteerDecreasementNormal = 2;
+const int SteerDecreasementFast = 5;
+const int SteerDecreasementMax = 10;
+
+const int LeftMax = 0;
+const int SteerZeroPosMin = 126;
+const int SteerZeroPosMax = 130;
+const int RigthMax = 255;
 
 const int SteerEnablePin = 12;
 
@@ -106,7 +111,144 @@ void loop()
         //Lenken (Wenn aktiv)
         if(steerEnable)
         {
-          currentSteer = map(joyX, SteerPosMin, SteerPosMax, SteerOverallMin, SteerOverallMax);
+          //Geschwindigkeit
+          //Soll langsam gebremst werden? (Joystick mittig)
+          if(joyX >= SteerZeroPosMin &&
+            joyX <= SteerZeroPosMax)
+          {
+            //Fahren wir vorwärts?
+            if(currentSteer > SteerOverallZero)
+            {
+              //stehen wir schon?
+              if(currentSteer - SteerDecreasementNormal <= SteerOverallZero)
+              {
+                currentSteer = SteerOverallZero;
+              }
+              else
+              {
+                currentSteer -= SteerDecreasementNormal;
+              }
+            }
+            else
+            {
+              //Fahren Rückwärts
+              //stehen wir schon?
+              if(currentSteer + SteerDecreasementNormal > SteerOverallZero)
+              {
+                currentSteer = SteerOverallZero;
+              }
+              else
+              {
+                currentSteer += SteerDecreasementNormal;
+              }
+            }
+          }
+          else
+          {
+            //Ist der Joystick leicht nach vorne gedrückt und wir fahren Rückwärts
+            if(joyX > SteerZeroPosMax &&
+              joyX < RigthMax &&
+              currentSteer < SteerOverallZero)
+            {
+              //Minimum schon erreicht?
+              if(currentSteer + SteerDecreasementFast >= SteerOverallZero)
+              {
+                currentSteer = SteerOverallZero;
+                firstConnection = true;
+              }
+              else
+              {
+                currentSteer += SteerDecreasementFast;
+              }
+            }
+            else
+            {
+              //Ist der Joystick leicht nach hinten gedrückt und wir fahren vorwärts
+              if(joyX < SteerZeroPosMin &&
+                joyX > LeftMax &&
+                currentSteer > SteerOverallZero)
+              {
+                //Minimum schon erreicht?
+                if(currentSteer - SteerDecreasementFast <= SteerOverallZero)
+                {
+                  currentSteer = SteerOverallZero;
+                  firstConnection = true;
+                }
+                else
+                {
+                  currentSteer -= SteerDecreasementFast;
+                }
+              }
+              else
+              {
+                //Ist Joystick ganz nach vorne gedrück?
+                if(joyX >= RigthMax)
+                {
+                  //Fahren wir vorwärts?
+                  if(currentSteer >= SteerOverallZero)
+                  {
+                    //Maximum schon erreicht?
+                    if(currentSteer + SteerIncreasement > SteerOverallRight)
+                    {
+                      currentSteer = SteerOverallRight;
+                    }
+                    else
+                    {
+                      currentSteer += SteerIncreasement;
+                    }
+                  }
+                  else
+                  {
+                    //Wenn wir rückswärts fahren
+                    //Stop schon erreicht?
+                    if(currentSteer + SteerDecreasementMax >= SteerOverallZero)
+                    {
+                      currentSteer = SteerOverallZero;
+                      firstConnection = true;
+                    }
+                    else
+                    {
+                      currentSteer += SteerDecreasementMax;
+                    }
+                  }
+                }
+                else
+                {
+                  //Ist Joystick ganz nach hinten gedrück?
+                  if(joyX <= LeftMax)
+                  {
+                    //Fahren wir rückwärts?
+                    if(currentSteer <= SteerOverallZero)
+                    {
+                      //Minimum schon erreicht?
+                      if(currentSteer - SteerIncreasement < SteerOverallLeft)
+                      {
+                        currentSteer = SteerOverallLeft;
+                      }
+                      else
+                      {
+                        currentSteer -= SteerIncreasement;
+                      }
+                    }
+                    else
+                    {
+                      //Wir fahren vorwärts
+                      //Stop schon erreich?
+                      if(currentSteer - SteerDecreasementMax <= SteerOverallZero)
+                      {
+                        currentSteer = SteerOverallZero;
+                        firstConnection = true;
+                      }
+                      else
+                      {
+                        currentSteer -= SteerDecreasementMax;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
         else
         {
