@@ -420,8 +420,10 @@ void loop()
   for (int i = 0; i < ups.msgToHover.len; i++){
     ups.msgToHover.CS -= ups.UART_Packet[i+1];
   }
-
+  
   SerialBoardOne.write(ups.UART_Packet, sizeof(UART_Packet_t));
+  SerialBoardTwo.write(ups.UART_Packet, sizeof(UART_Packet_t));
+  /*
   if (SerialBoardOne.available())
   {
     
@@ -430,7 +432,6 @@ void loop()
     Serial.write(SerialBoardOne.read());
     Serial.println("<<");
   }
-  SerialBoardTwo.write(ups.UART_Packet, sizeof(UART_Packet_t));
   if (SerialBoardTwo.available())
   {
     
@@ -438,7 +439,7 @@ void loop()
     Serial.println(">>");
     Serial.write(SerialBoardTwo.read());
     Serial.println("<<");
-  }
+  }*/
   
   Serial.print(SpeedOverallMax);
   Serial.print(" ");
@@ -447,6 +448,6 @@ void loop()
   Serial.print(currentSpeed);
   Serial.print(" ");
   Serial.print(currentSteer);
-  Serial.println(" Info");
+  Serial.println();
   delay(10);
 }
