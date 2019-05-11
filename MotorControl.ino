@@ -40,12 +40,14 @@ typedef union UART_Packet_t{
 };
 
 Nunchuk nunchuk; //A4/A5
-SoftwareSerial SerialBoard(10, 11); //D10/D11
+SoftwareSerial SerialBoardOne(10, 11); //D10/D11
+SoftwareSerial SerialBoardTwo(8, 9); //D8/D9
 
 void setup() {
   pinMode(SteerEnablePin, INPUT);
   Serial.begin(115200);
-  SerialBoard.begin(115200);
+  SerialBoardOne.begin(115200);
+  SerialBoardTwo.begin(115200);
   nunchuk.begin(); //D4/D5
 }
 
@@ -257,6 +259,12 @@ void loop()
         currentSteer = SteerOverallZero;
       }
     }
+    else
+    {
+      //Totmannschalter nicht gedrückt, Controller ab, irgendwas stimmt nicht: Bremsen!
+      currentSpeed = SpeedOverallZero;
+      currentSteer = SteerOverallZero;
+    }
   }
   
   ups.msgToHover.SOM = 2 ;  // PROTOCOL_SOM; //Start of Message;
@@ -271,7 +279,24 @@ void loop()
     ups.msgToHover.CS -= ups.UART_Packet[i+1];
   }
 
-  SerialBoard.write(ups.UART_Packet, sizeof(UART_Packet_t));
+  SerialBoardOne.write(ups.UART_Packet, sizeof(UART_Packet_t));
+  if (SerialBoardOne.available())
+  {
+    
+    Serial.println("SerialBoardOne:");
+    Serial.println(">>");
+    Serial.write(SerialBoardOne.read());
+    Serial.println("<<");
+  }
+  SerialBoardTwo.write(ups.UART_Packet, sizeof(UART_Packet_t));
+  if (SerialBoardTwo.available())
+  {
+    
+    Serial.println("SerialBoardOne:");
+    Serial.println(">>");
+    Serial.write(SerialBoardTwo.read());
+    Serial.println("<<");
+  }
   
   Serial.print(SpeedOverallMax);
   Serial.print(" ");
