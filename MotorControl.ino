@@ -1,26 +1,26 @@
 #include <SoftwareSerial.h>
 #include <NintendoExtensionCtrl.h>
 
-const int SpeedOverallMax = 1000;
-const int SpeedOverallZero = 0;
-const int SpeedOverallMin = -1000;
-const int SpeedIncreasement = 2;
-const int SpeedDecreasementNormal = 2;
-const int SpeedDecreasementFast = 5;
-const int SpeedDecreasementMax = 10;
+const float SpeedOverallMax = 1000.0;
+const float SpeedOverallZero = 0.0;
+const float SpeedOverallMin = -1000.0;
+const float SpeedIncreasement = 2.0;
+const float SpeedDecreasementNormal = 2.0;
+const float SpeedDecreasementFast = 5.0;
+const float SpeedDecreasementMax = 10.0;
 
 const int ReverseMax = 0;
 const int SpeedZeroPosMin = 126;
 const int SpeedZeroPosMax = 130;
 const int ForwardMax = 255;
 
-const int SteerOverallRight = 250;
-const int SteerOverallZero = 0;
-const int SteerOverallLeft = -250;
-const int SteerIncreasement = 5;
-const int SteerDecreasementNormal = 5;
-const int SteerDecreasementFast = 5;
-const int SteerDecreasementMax = 5;
+const float SteerOverallRight = 250.0;
+const float SteerOverallZero = 0.0;
+const float SteerOverallLeft = -250.0;
+const float SteerIncreasement = 5.0;
+const float SteerDecreasementNormal = 5.0;
+const float SteerDecreasementFast = 5.0;
+const float SteerDecreasementMax = 5.0;
 
 const int LeftMax = 0;
 const int SteerZeroPosMin = 126;
@@ -394,8 +394,8 @@ void loop()
   ups.msgToHover.len = 7;   // payload + SC only
   ups.msgToHover.cmd  = 'W'; // PROTOCOL_CMD_WRITEVAL;  // Write value
   ups.msgToHover.code = 0x07; // speed data from params array
-  ups.msgToHover.base_pwm = currentSpeed;
-  ups.msgToHover.steer = currentSteer;
+  ups.msgToHover.base_pwm = int(currentSpeed);
+  ups.msgToHover.steer = int(currentSteer);
   ups.msgToHover.CS = 0;
 
   for (int i = 0; i < ups.msgToHover.len; i++){
