@@ -17,10 +17,10 @@ const int ForwardMax = 255;
 const int SteerOverallRight = 250;
 const int SteerOverallZero = 0;
 const int SteerOverallLeft = -250;
-const int SteerIncreasement = 1;
-const int SteerDecreasementNormal = 2;
+const int SteerIncreasement = 5;
+const int SteerDecreasementNormal = 5;
 const int SteerDecreasementFast = 5;
-const int SteerDecreasementMax = 10;
+const int SteerDecreasementMax = 5;
 
 const int LeftMax = 0;
 const int SteerZeroPosMin = 126;
@@ -59,6 +59,7 @@ void setup() {
 
 boolean readSuccess = false;
 boolean firstConnection = true;
+boolean speedZeroPos = true;
 int currentSpeed = SpeedOverallZero;
 int currentSteer = SteerOverallZero;
 void loop()
@@ -111,15 +112,14 @@ void loop()
         //Lenken (Wenn aktiv)
         if(steerEnable)
         {
-          //Geschwindigkeit
-          //Soll langsam gebremst werden? (Joystick mittig)
+          //Soll langsam wieder gerade gesteuert werden? (Joystick mittig)
           if(joyX >= SteerZeroPosMin &&
             joyX <= SteerZeroPosMax)
           {
-            //Fahren wir vorwärts?
+            //Fahren wir nach Rechts?
             if(currentSteer > SteerOverallZero)
             {
-              //stehen wir schon?
+              //Fahren wir schon gerade aus?
               if(currentSteer - SteerDecreasementNormal <= SteerOverallZero)
               {
                 currentSteer = SteerOverallZero;
@@ -145,21 +145,13 @@ void loop()
           }
           else
           {
-            //Ist der Joystick leicht nach vorne gedrückt und wir fahren Rückwärts
+            //Ist der Joystick leicht nach Links gedrückt und wir fahren nach rechts
             if(joyX > SteerZeroPosMax &&
               joyX < RigthMax &&
               currentSteer < SteerOverallZero)
             {
               //Minimum schon erreicht?
-              if(currentSteer + SteerDecreasementFast >= SteerOverallZero)
-              {
-                currentSteer = SteerOverallZero;
-                firstConnection = true;
-              }
-              else
-              {
-                currentSteer += SteerDecreasementFast;
-              }
+              currentSteer += SteerDecreasementFast;
             }
             else
             {
@@ -169,25 +161,17 @@ void loop()
                 currentSteer > SteerOverallZero)
               {
                 //Minimum schon erreicht?
-                if(currentSteer - SteerDecreasementFast <= SteerOverallZero)
-                {
-                  currentSteer = SteerOverallZero;
-                  firstConnection = true;
-                }
-                else
-                {
-                  currentSteer -= SteerDecreasementFast;
-                }
+                currentSteer -= SteerDecreasementFast;
               }
               else
               {
-                //Ist Joystick ganz nach vorne gedrück?
+                //Ist Joystick ganz nach rechts gedrück?
                 if(joyX >= RigthMax)
                 {
-                  //Fahren wir vorwärts?
+                  //Fahren wir nacht rechts?
                   if(currentSteer >= SteerOverallZero)
                   {
-                    //Maximum schon erreicht?
+                    //Maximum nach rechts schon erreicht?
                     if(currentSteer + SteerIncreasement > SteerOverallRight)
                     {
                       currentSteer = SteerOverallRight;
@@ -199,28 +183,20 @@ void loop()
                   }
                   else
                   {
-                    //Wenn wir rückswärts fahren
-                    //Stop schon erreicht?
-                    if(currentSteer + SteerDecreasementMax >= SteerOverallZero)
-                    {
-                      currentSteer = SteerOverallZero;
-                      firstConnection = true;
-                    }
-                    else
-                    {
-                      currentSteer += SteerDecreasementMax;
-                    }
+                    //Wenn wir nach Links fahren
+                    //Mitte schon erreicht?
+                    currentSteer += SteerDecreasementMax;
                   }
                 }
                 else
                 {
-                  //Ist Joystick ganz nach hinten gedrück?
+                  //Ist Joystick ganz nach Links gedrück?
                   if(joyX <= LeftMax)
                   {
-                    //Fahren wir rückwärts?
+                    //Fahren wir Rechts?
                     if(currentSteer <= SteerOverallZero)
                     {
-                      //Minimum schon erreicht?
+                      //Minimum von links schon erreicht?
                       if(currentSteer - SteerIncreasement < SteerOverallLeft)
                       {
                         currentSteer = SteerOverallLeft;
@@ -232,17 +208,9 @@ void loop()
                     }
                     else
                     {
-                      //Wir fahren vorwärts
+                      //Wir fahren nach Links
                       //Stop schon erreich?
-                      if(currentSteer - SteerDecreasementMax <= SteerOverallZero)
-                      {
-                        currentSteer = SteerOverallZero;
-                        firstConnection = true;
-                      }
-                      else
-                      {
-                        currentSteer -= SteerDecreasementMax;
-                      }
+                      currentSteer -= SteerDecreasementMax;
                     }
                   }
                 }
@@ -255,137 +223,148 @@ void loop()
           currentSteer = SteerOverallZero;
         }
         
-        //Geschwindigkeit
-        //Soll langsam gebremst werden? (Joystick mittig)
-        if(joyY >= SpeedZeroPosMin &&
+        //Geschwindigkeit (nur wenn einmal die Y-Achse-Mitte erreicht wurde)
+        if(speedZeroPos &&
+          joyY >= SpeedZeroPosMin &&
           joyY <= SpeedZeroPosMax)
         {
-          //Fahren wir vorwärts?
-          if(currentSpeed > SpeedOverallZero)
-          {
-            //stehen wir schon?
-            if(currentSpeed - SpeedDecreasementNormal <= SpeedOverallZero)
-            {
-              currentSpeed = SpeedOverallZero;
-            }
-            else
-            {
-              currentSpeed -= SpeedDecreasementNormal;
-            }
-          }
-          else
-          {
-            //Fahren Rückwärts
-            //stehen wir schon?
-            if(currentSpeed + SpeedDecreasementNormal > SpeedOverallZero)
-            {
-              currentSpeed = SpeedOverallZero;
-            }
-            else
-            {
-              currentSpeed += SpeedDecreasementNormal;
-            }
-          }
+          //Todmann Schalter gedrück, Joystick in der Y-Achse-Mitte - ab jetzt darf gesteuert werden
+          speedZeroPos = false;
         }
-        else
+        
+        if(!speedZeroPos)
         {
-          //Ist der Joystick leicht nach vorne gedrückt und wir fahren Rückwärts
-          if(joyY > SpeedZeroPosMax &&
-            joyY < ForwardMax &&
-            currentSpeed < SpeedOverallZero)
+          //Soll langsam gebremst werden? (Joystick mittig)
+          if(joyY >= SpeedZeroPosMin &&
+            joyY <= SpeedZeroPosMax)
           {
-            //Minimum schon erreicht?
-            if(currentSpeed + SpeedDecreasementFast >= SpeedOverallZero)
+            //Fahren wir vorwärts?
+            if(currentSpeed > SpeedOverallZero)
             {
-              currentSpeed = SpeedOverallZero;
-              firstConnection = true;
-            }
-            else
-            {
-              currentSpeed += SpeedDecreasementFast;
-            }
-          }
-          else
-          {
-            //Ist der Joystick leicht nach hinten gedrückt und wir fahren vorwärts
-            if(joyY < SpeedZeroPosMin &&
-              joyY > ReverseMax &&
-              currentSpeed > SpeedOverallZero)
-            {
-              //Minimum schon erreicht?
-              if(currentSpeed - SpeedDecreasementFast <= SpeedOverallZero)
+              //stehen wir schon?
+              if(currentSpeed - SpeedDecreasementNormal <= SpeedOverallZero)
               {
                 currentSpeed = SpeedOverallZero;
-                firstConnection = true;
               }
               else
               {
-                currentSpeed -= SpeedDecreasementFast;
+                currentSpeed -= SpeedDecreasementNormal;
               }
             }
             else
             {
-              //Ist Joystick ganz nach vorne gedrück?
-              if(joyY >= ForwardMax)
+              //Fahren Rückwärts
+              //stehen wir schon?
+              if(currentSpeed + SpeedDecreasementNormal > SpeedOverallZero)
               {
-                //Fahren wir vorwärts?
-                if(currentSpeed >= SpeedOverallZero)
+                currentSpeed = SpeedOverallZero;
+              }
+              else
+              {
+                currentSpeed += SpeedDecreasementNormal;
+              }
+            }
+          }
+          else
+          {
+            //Ist der Joystick leicht nach vorne gedrückt und wir fahren Rückwärts
+            if(joyY > SpeedZeroPosMax &&
+              joyY < ForwardMax &&
+              currentSpeed < SpeedOverallZero)
+            {
+              //Minimum schon erreicht?
+              if(currentSpeed + SpeedDecreasementFast >= SpeedOverallZero)
+              {
+                currentSpeed = SpeedOverallZero;
+                speedZeroPos = true;
+              }
+              else
+              {
+                currentSpeed += SpeedDecreasementFast;
+              }
+            }
+            else
+            {
+              //Ist der Joystick leicht nach hinten gedrückt und wir fahren vorwärts
+              if(joyY < SpeedZeroPosMin &&
+                joyY > ReverseMax &&
+                currentSpeed > SpeedOverallZero)
+              {
+                //Minimum schon erreicht?
+                if(currentSpeed - SpeedDecreasementFast <= SpeedOverallZero)
                 {
-                  //Maximum schon erreicht?
-                  if(currentSpeed + SpeedIncreasement > SpeedOverallMax)
+                  currentSpeed = SpeedOverallZero;
+                  speedZeroPos = true;
+                }
+                else
+                {
+                  currentSpeed -= SpeedDecreasementFast;
+                }
+              }
+              else
+              {
+                //Ist Joystick ganz nach vorne gedrück?
+                if(joyY >= ForwardMax)
+                {
+                  //Fahren wir vorwärts?
+                  if(currentSpeed >= SpeedOverallZero)
                   {
-                    currentSpeed = SpeedOverallMax;
+                    //Maximum schon erreicht?
+                    if(currentSpeed + SpeedIncreasement > SpeedOverallMax)
+                    {
+                      currentSpeed = SpeedOverallMax;
+                    }
+                    else
+                    {
+                      currentSpeed += SpeedIncreasement;
+                    }
                   }
                   else
                   {
-                    currentSpeed += SpeedIncreasement;
+                    //Wenn wir rückswärts fahren
+                    //Stop schon erreicht?
+                    if(currentSpeed + SpeedDecreasementMax >= SpeedOverallZero)
+                    {
+                      currentSpeed = SpeedOverallZero;
+                      speedZeroPos = true;
+                    }
+                    else
+                    {
+                      currentSpeed += SpeedDecreasementMax;
+                    }
                   }
                 }
                 else
                 {
-                  //Wenn wir rückswärts fahren
-                  //Stop schon erreicht?
-                  if(currentSpeed + SpeedDecreasementMax >= SpeedOverallZero)
+                  //Ist Joystick ganz nach hinten gedrück?
+                  if(joyY <= ReverseMax)
                   {
-                    currentSpeed = SpeedOverallZero;
-                    firstConnection = true;
-                  }
-                  else
-                  {
-                    currentSpeed += SpeedDecreasementMax;
-                  }
-                }
-              }
-              else
-              {
-                //Ist Joystick ganz nach hinten gedrück?
-                if(joyY <= ReverseMax)
-                {
-                  //Fahren wir rückwärts?
-                  if(currentSpeed <= SpeedOverallZero)
-                  {
-                    //Minimum schon erreicht?
-                    if(currentSpeed - SpeedIncreasement < SpeedOverallMin)
+                    //Fahren wir rückwärts?
+                    if(currentSpeed <= SpeedOverallZero)
                     {
-                      currentSpeed = SpeedOverallMin;
+                      //Minimum schon erreicht?
+                      if(currentSpeed - SpeedIncreasement < SpeedOverallMin)
+                      {
+                        currentSpeed = SpeedOverallMin;
+                      }
+                      else
+                      {
+                        currentSpeed -= SpeedIncreasement;
+                      }
                     }
                     else
                     {
-                      currentSpeed -= SpeedIncreasement;
-                    }
-                  }
-                  else
-                  {
-                    //Wir fahren vorwärts
-                    //Stop schon erreich?
-                    if(currentSpeed - SpeedDecreasementMax <= SpeedOverallZero)
-                    {
-                      currentSpeed = SpeedOverallZero;
-                      firstConnection = true;
-                    }
-                    else
-                    {
-                      currentSpeed -= SpeedDecreasementMax;
+                      //Wir fahren vorwärts
+                      //Stop schon erreich?
+                      if(currentSpeed - SpeedDecreasementMax <= SpeedOverallZero)
+                      {
+                        currentSpeed = SpeedOverallZero;
+                        speedZeroPos = true;
+                      }
+                      else
+                      {
+                        currentSpeed -= SpeedDecreasementMax;
+                      }
                     }
                   }
                 }
@@ -395,17 +374,19 @@ void loop()
         }
       }
       else
-      {
-        //Totmannschalter nicht gedrückt, Controller ab, irgendwas stimmt nicht: Bremsen!
+      { //(!firstConnection && zButton) == false
+        //Totmannschalter nicht gedrückt: Bremsen!
         currentSpeed = SpeedOverallZero;
         currentSteer = SteerOverallZero;
+        firstConnection = true;
       }
     }
     else
-    {
-      //Totmannschalter nicht gedrückt, Controller ab, irgendwas stimmt nicht: Bremsen!
+    { //readSuccess == false
+      //Controller ab, irgendwas stimmt nicht: Bremsen!
       currentSpeed = SpeedOverallZero;
       currentSteer = SteerOverallZero;
+      firstConnection = true;
     }
   }
   
