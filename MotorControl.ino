@@ -4,38 +4,39 @@
 const float SpeedOverallMax = 1000.0;
 const float SpeedOverallZero = 0.0;
 const float SpeedOverallMin = -1000.0;
-const float SpeedIncreasement = 2.0;
-const float SpeedDecreasementNormal = 2.0;
-const float SpeedDecreasementFast = 5.0;
-const float SpeedDecreasementMax = 10.0;
+const float SpeedIncreasement = 6.0;
+const float SpeedDecreasementNormal = 6.0;
+const float SpeedDecreasementFast = 15.0;
+const float SpeedDecreasementMax = 30.0;
 
-const int ReverseMax = 0;
-const int SpeedZeroPosMin = 126;
-const int SpeedZeroPosMax = 130;
-const int ForwardMax = 255;
+const int ReverseMax = 33;
+const int SpeedZeroPosMin = 130;
+const int SpeedZeroPosMax = 137;
+const int ForwardMax = 232;
 
-const float SteerOverallRight = 250.0;
+const float SteerOverallRight = 1000.0;
 const float SteerOverallZero = 0.0;
-const float SteerOverallLeft = -250.0;
-const float SteerIncreasement = 5.0;
-const float SteerDecreasementNormal = 5.0;
-const float SteerDecreasementFast = 5.0;
-const float SteerDecreasementMax = 5.0;
+const float SteerOverallLeft = -1000.0;
+const float SteerIncreasement = 15.0;
+const float SteerDecreasementNormal = 15.0;
+const float SteerDecreasementFast = 15.0;
+const float SteerDecreasementMax = 15.0;
 
-const int LeftMax = 0;
-const int SteerZeroPosMin = 126;
-const int SteerZeroPosMax = 130;
-const int RigthMax = 255;
+const int LeftMax = 20;
+const int SteerZeroPosMin = 120;
+const int SteerZeroPosMax = 125;
+const int RigthMax = 219;
 
 const int SteerEnablePin = 12;
 
 typedef struct MsgToHoverboard_t{
-  unsigned char SOM;  // 0x02
-  unsigned char len;  // len is len of ALL bytes to follow, including CS
-  unsigned char cmd;  // 'W'
+  unsigned char SOM;  // Start of Message
+  unsigned char CI;   // continuity counter
+  unsigned char len;  // len is len of bytes to follow, NOT including CS
+  unsigned char cmd;  // read or write
   unsigned char code; // code of value to write
-  int16_t base_pwm;   // absolute value ranging from -1000 to 1000 .. base_pwm plus/minus steer is the raw PWM value
-  int16_t steer;      // absolute value ranging from -1000 to 1000 .. wether steer is added or substracted depends on the side R/L
+  int32_t pwm1;           // absolute value ranging from -1000 to 1000 .. Duty Cycle *10 for first wheel
+  int32_t pwm2;           // absolute value ranging from -1000 to 1000 .. Duty Cycle *10 for second wheel
   unsigned char CS;   // checksumm
 };
 
@@ -62,6 +63,7 @@ boolean firstConnection = true;
 boolean speedZeroPos = true;
 int currentSpeed = SpeedOverallZero;
 int currentSteer = SteerOverallZero;
+char hoverboardCI = 0;  // Global variable which tracks CI
 void loop()
 {
   UART_Packet_t ups;
@@ -389,23 +391,24 @@ void loop()
       firstConnection = true;
     }
   }
-  
-  ups.msgToHover.SOM = 2 ;  // PROTOCOL_SOM; //Start of Message;
-  ups.msgToHover.len = 7;   // payload + SC only
-  ups.msgToHover.cmd  = 'W'; // PROTOCOL_CMD_WRITEVAL;  // Write value
-  ups.msgToHover.code = 0x07; // speed data from params array
-  ups.msgToHover.base_pwm = int(currentSpeed);
-  ups.msgToHover.steer = int(currentSteer);
-  ups.msgToHover.CS = 0;
 
-  for (int i = 0; i < ups.msgToHover.len; i++){
+  ups.msgToHover.SOM = 4 ;    // Start of Message, 4 for No ACKs;
+  ups.msgToHover.CI = ++hoverboardCI; // Message Continuity Indicator. Subsequent Messages with the same CI are discarded, need to be incremented.
+  ups.msgToHover.len = 1 + 1 + 4 + 4 ; // cmd(1), code(1), pwm1(4) and pwm2(4)
+  ups.msgToHover.cmd  = 'r';  // Pretend to send answer to read request. This way HB will not reply. Change to 'W' to get confirmation from board
+  ups.msgToHover.code = 0x0E; // "simpler PWM"
+  ups.msgToHover.pwm1 = int(currentSpeed);
+  ups.msgToHover.pwm2 = int(currentSpeed);
+  ups.msgToHover.CS = 0;
+  
+  for (int i = 0; i < (2 + ups.msgToHover.len); i++){  // Calculate checksum. 2 more for CI and len.
     ups.msgToHover.CS -= ups.UART_Packet[i+1];
   }
   
   SerialBoardOne.write(ups.UART_Packet, sizeof(UART_Packet_t));
   SerialBoardTwo.write(ups.UART_Packet, sizeof(UART_Packet_t));
-  /*
-  if (SerialBoardOne.available())
+  
+  /*if (SerialBoardOne.available())
   {
     
     Serial.println("SerialBoardOne:");
@@ -432,3 +435,5 @@ void loop()
   Serial.println();
   delay(10);
 }
+
+
