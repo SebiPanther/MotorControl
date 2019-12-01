@@ -1,8 +1,43 @@
+/*
+ * This is a "small" arduino sketch to control two hoverboard ESCs with one nunchuck.
+ * At the moment this runs on a arduino with the following IOs:
+ * A4/A5 - Nunchuck connector
+ * D8/D9 - Software serial for the first ESC
+ * D10/D11 - Software serial for the secound ESC. This also delivers power to the board over a step down conveter. Don't connect usb and ESC at the same time!
+ * D12 - Switch to enable or disable steering. Thats more important for railcar mode. To steer on rails is a waiste of power
+ * In reason of the bad signals from the nuncuck its not possible to map the nunchuck values to the ESC values.
+ * The Nunchuck gives only the following informations:
+ * Joystick Y: 0-255 (Maybe 16steps)
+ * Joystick X: 0-255 (Maybe 16steps)
+ * ZButton Pressed
+ * CButton Pressed
+ * Also the Joystick of the nunchuck is "kind of" a circle and not a square.
+ * The ESC(s) needs the following informations:
+ * Speed: -1000 - +1000
+ * Steer: -1000 - +1000
+ * Thats one of the reason for the complexity of the code.
+ * Also it has some more features:
+ * - Deadman switch - do not drive until the ZButton is pressed.
+ * - Only start driving if deadman switch is pressed and the joystick is in the middle
+ * - Accelerate on the maximum positions on the nunchuck and only then!
+ * - Keep the current speed if you dail the position of the joystick slightly back from its maximum position 
+ * - Break if the joystick is moved in the opposite position until it stops.
+ * - Don't drive in another direction until the joystick reached the middle postion one more time. 
+ * - Its possible to steer from one to another side without disruption.
+ */
 #include <SoftwareSerial.h>
 #include <NintendoExtensionCtrl.h>
 #include "math.h"
 
-//Struct that describe the speed and the steer Value
+
+// ########################## DEFINES ##########################
+#define HOVER_SERIAL_BAUD   38400       // [-] Baud rate for HoverSerial (used to communicate with the hoverboard)
+#define SERIAL_BAUD         115200      // [-] Baud rate for built-in Serial (used for the Serial Monitor)
+#define START_FRAME         0xAAAA       // [-] Start frme definition for reliable serial communication
+#define TIME_SEND           100         // [ms] Sending time interval
+#define SPEED_MAX_TEST      300         // [-] Maximum speed for testing
+
+//Struct that described all the static values
 typedef struct{
   const double YMiddle = 133.5; //Depense on your Nunchuck - Middle Position of the Y Achses
   const double ZMiddle = 122.5;
@@ -26,13 +61,14 @@ typedef struct{
   const int Delay = 10;
 } ConstStruct;
 
-//Struct that descripe the State of the Nunchuck
+//Struct that described  the State of the Nunchuck
 typedef struct{
   boolean Connected = false; //Nunchuck connected
   int JoyY = 127; //Forward/Backward
   int JoyX = 127; //Left/Right
   boolean ZButton = false; //Dead man switch
   boolean CButton = false; //Additional Switch
+  boolean DeadManSwitchPress = false; //Dead man switch
 } NunchukStruct;
 
 //Enum that describe the direction of travel
@@ -82,6 +118,29 @@ typedef struct{
   bool BSituationHandled = false;
 } CalculationStruct;
 
+typedef struct{
+   uint16_t  start;
+   int16_t  steer;
+   int16_t  speed;
+   uint16_t checksum;
+} SerialCommand;
+SerialCommand Command;
+
+typedef struct{
+   uint16_t start;
+   int16_t  cmd1;
+   int16_t  cmd2;
+   int16_t  speedR;
+   int16_t  speedL;
+   int16_t  speedR_meas;
+   int16_t  speedL_meas;
+   int16_t  batVoltage;
+   int16_t  boardTemp;
+   int16_t  checksum;
+} SerialFeedback;
+SerialFeedback Feedback;
+SerialFeedback NewFeedback;
+
 
 
 /* All Values - it would be possible to pass several things around as parameters.
@@ -103,13 +162,21 @@ ConstStruct ConstInfo;
 CalculationStruct CalculationInfo;
 //Steering Enabled Button on the board
 boolean SteerEnable = false;
-//Steering Enabled Button on the board
+
+// Global variables
+uint8_t idx = 0;                        // Index for new data pointer
+uint16_t bufStartFrame;                 // Buffer Start Frame
+byte *p;                                // Pointer declaration for the new received data
+byte incomingByte;
+byte incomingBytePrev;
 
 void setup() {
   pinMode(SteerEnablePin, INPUT);
   Serial.begin(115200);
-  SerialBoardOne.begin(115200);
-  SerialBoardTwo.begin(115200);
+  //SerialBoardOne.begin(115200);
+  //SerialBoardTwo.begin(115200);
+  SerialBoardOne.begin(HOVER_SERIAL_BAUD);
+  SerialBoardTwo.begin(HOVER_SERIAL_BAUD);
   nunchuk.begin(); //D4/D5
 
   //Reset all Infos for sure!
@@ -123,14 +190,14 @@ void loop()
   SteerEnable = digitalRead(SteerEnablePin);
   ReadNunchukInfo();
 
-  if(NunchukInfo.Connected == true &&
-    NunchukInfo.ZButton == true)
+  if(NunchukInfo.Connected == true)
   {
     //If drive enable caculate new speeds and stuff.
     GenerateCalculationInfo();
-   
-     if(CalculationInfo.ASituationHandled == false || 
-       CalculationInfo.BSituationHandled == false)
+    
+     if(NunchukInfo.DeadManSwitchPress == false ||
+        CalculationInfo.ASituationHandled == false || 
+        CalculationInfo.BSituationHandled == false)
      {
        //Unlogical readings - thats the moment to get to a save state!
        //Don't forget the wrong Calculations just for debug purposesś
@@ -140,7 +207,7 @@ void loop()
      {
       GenerateDriveInfo();
       if(CalculationInfo.ASituationHandled == false || 
-       CalculationInfo.BSituationHandled == false)
+         CalculationInfo.BSituationHandled == false)
        {
         ResetDriveInfo();
        }
@@ -189,6 +256,7 @@ void ResetNunchukInfo()
   NunchukInfo.JoyX = 127;
   NunchukInfo.ZButton = false;
   NunchukInfo.CButton = false;
+  NunchukInfo.DeadManSwitchPress = false; 
 }
 
 //Calculate the values we prefer for the drive
@@ -218,9 +286,28 @@ void GenerateCalculationInfo()
   CalculationInfo.ASituationHandled = false;
   CalculationInfo.BSituationHandled = false;
 
+  //Don't drive if DeadManSwitch is not pressed!
+  if(NunchukInfo.ZButton == false)
+  {
+    CalculationInfo.NunchuckSpeed = MiddleSpeedPosition;
+    CalculationInfo.NunchuckSteer = MiddleSteerPosition;
+    CalculationInfo.ASituationHandled = true;
+    CalculationInfo.BSituationHandled = true;
+    NunchukInfo.DeadManSwitchPress = false;
+  }
+  if(NunchukInfo.ZButton == true &&
+     CalculationInfo.A <=  ConstInfo.MiddleCircle &&
+     CalculationInfo.A >=  (ConstInfo.MiddleCircle * -1) &&
+     CalculationInfo.B <=  ConstInfo.MiddleCircle &&
+     CalculationInfo.B >=  (ConstInfo.MiddleCircle * -1))
+  {
+    NunchukInfo.DeadManSwitchPress = true;
+  }
+  
   //Determen Speed
   //We are still in the threshold between Forward and Backwards. Its the size of the middle Circle - that way we can turn on the spot
-  if(CalculationInfo.ASituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.ASituationHandled == false &&
      CalculationInfo.A <=  ConstInfo.MiddleCircle &&
      CalculationInfo.A >=  (ConstInfo.MiddleCircle * -1))
    {
@@ -229,7 +316,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the threshold between Forward and Backwards. We are in the inner circle. 
-  if(CalculationInfo.ASituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.ASituationHandled == false &&
      CalculationInfo.A >= 0 &&
      CalculationInfo.C <=  ConstInfo.InnerCircle)
    {
@@ -238,7 +326,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the threshold between Forward and Backwards. We are in the inner circle. 
-  if(CalculationInfo.ASituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.ASituationHandled == false &&
      CalculationInfo.A < 0 &&
      CalculationInfo.C <=  ConstInfo.InnerCircle)
    {
@@ -247,7 +336,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the InnerCircle.
-  if(CalculationInfo.ASituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.ASituationHandled == false &&
      CalculationInfo.A >= 0 &&
      CalculationInfo.C <=  ConstInfo.EndOfOuterCircle)
    {
@@ -256,7 +346,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the InnerCircle.
-  if(CalculationInfo.ASituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.ASituationHandled == false &&
      CalculationInfo.A < 0 &&
      CalculationInfo.C <=  ConstInfo.EndOfOuterCircle)
    {
@@ -266,7 +357,8 @@ void GenerateCalculationInfo()
    
   //Determen steer
   //We are still in the threshold between Forward and Backwards. Its the size of the middle Circle - that way we can turn on the spot
-  if(CalculationInfo.BSituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.BSituationHandled == false &&
      CalculationInfo.B <=  ConstInfo.MiddleCircle &&
      CalculationInfo.B >=  (ConstInfo.MiddleCircle * -1))
    {
@@ -275,7 +367,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the threshold between Forward and Backwards. We are in the inner circle. 
-  if(CalculationInfo.BSituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.BSituationHandled == false &&
      CalculationInfo.B >= 0 &&
      CalculationInfo.C <=  ConstInfo.InnerCircle)
    {
@@ -284,7 +377,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the threshold between Forward and Backwards. We are in the inner circle. 
-  if(CalculationInfo.BSituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.BSituationHandled == false &&
      CalculationInfo.B < 0 &&
      CalculationInfo.C <=  ConstInfo.InnerCircle)
    {
@@ -293,7 +387,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the InnerCircle.
-  if(CalculationInfo.BSituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.BSituationHandled == false &&
      CalculationInfo.B >= 0 &&
      CalculationInfo.C <=  ConstInfo.EndOfOuterCircle)
    {
@@ -302,7 +397,8 @@ void GenerateCalculationInfo()
    }
 
   //We are beyond the InnerCircle.
-  if(CalculationInfo.BSituationHandled == false &&
+  if(NunchukInfo.DeadManSwitchPress == true &&
+     CalculationInfo.BSituationHandled == false &&
      CalculationInfo.B < 0 &&
      CalculationInfo.C <=  ConstInfo.EndOfOuterCircle)
    {
@@ -681,6 +777,8 @@ void WriteAllInfo()
   Serial.print(" ");
   Serial.print(NunchukInfo.CButton);
   Serial.print(" ");
+  Serial.print(NunchukInfo.DeadManSwitchPress);
+  Serial.print(" ");
   Serial.print(CalculationInfo.A);
   Serial.print(" ");
   Serial.print(CalculationInfo.B);
@@ -706,8 +804,23 @@ void WriteAllInfo()
   Serial.print(DriveInfo.DrivingDirection);
   Serial.println();
   
-  SerialBoardOne.write ((uint8_t *) &DriveInfo.Steer, sizeof(DriveInfo.Steer));
-  SerialBoardOne.write((uint8_t *) &DriveInfo.Speed, sizeof(DriveInfo.Speed));
-  SerialBoardTwo.write ((uint8_t *) &DriveInfo.Steer, sizeof(DriveInfo.Steer));
-  SerialBoardTwo.write((uint8_t *) &DriveInfo.Speed, sizeof(DriveInfo.Speed));
+  //SerialBoardOne.write ((uint8_t *) &DriveInfo.Steer, sizeof(DriveInfo.Steer));
+  //SerialBoardOne.write((uint8_t *) &DriveInfo.Speed, sizeof(DriveInfo.Speed));
+  //SerialBoardTwo.write ((uint8_t *) &DriveInfo.Steer, sizeof(DriveInfo.Steer));
+  //SerialBoardTwo.write((uint8_t *) &DriveInfo.Speed, sizeof(DriveInfo.Speed));
+  Send(DriveInfo.Steer, DriveInfo.Speed);
+}
+
+// ########################## SEND ##########################
+void Send(int16_t uSteer, int16_t uSpeed)
+{
+  // Create command
+  Command.start    = (uint16_t)START_FRAME;
+  Command.steer    = (int16_t)uSteer;
+  Command.speed    = (int16_t)uSpeed;
+  Command.checksum = (uint16_t)(Command.start ^ Command.steer ^ Command.speed);
+
+  // Write to Serial
+  SerialBoardOne.write((uint8_t *) &Command, sizeof(Command)); 
+  SerialBoardTwo.write((uint8_t *) &Command, sizeof(Command)); 
 }
